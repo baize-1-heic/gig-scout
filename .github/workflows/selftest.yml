@@ -1,0 +1,33 @@
+name: selftest
+
+# 双轮复现验证：对同一个 commit 连跑两轮 --self-test，两轮都绿才算过。
+# 第一轮挂 = 逻辑错；第一轮绿第二轮红 = 有不确定性/时序依赖/外部状态泄漏。
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Round 1 — self-test
+        run: python demand-scout.py --self-test
+
+      - name: Round 2 — self-test (same commit, second run)
+        run: python demand-scout.py --self-test
+
+      - name: Smoke — dry run (network, must not write disk)
+        run: python demand-scout.py --dry
+
+      - name: Build image (reproducibility check)
+        run: docker build -t gig-scout .
+
+      - name: Run self-test inside the built image
+        run: docker run --rm gig-scout python demand-scout.py --self-test
